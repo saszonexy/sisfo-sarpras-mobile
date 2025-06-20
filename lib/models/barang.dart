@@ -3,7 +3,7 @@ class Barang {
   final String kodeBarang;
   final String namaBarang;
   final String kategori;
-  final int jumlah;
+  final int stok;
   final int tersedia;
   final String kondisi;
   final String lokasi;
@@ -14,7 +14,7 @@ class Barang {
     required this.kodeBarang,
     required this.namaBarang,
     required this.kategori,
-    required this.jumlah,
+    required this.stok,
     required this.tersedia,
     required this.kondisi,
     required this.lokasi,
@@ -27,7 +27,7 @@ class Barang {
       kodeBarang: json['kode_barang'] ?? '',
       namaBarang: json['nama_barang'] ?? '',
       kategori: json['kategori'] ?? '',
-      jumlah: json['jumlah'] ?? 0,
+      stok: json['stok'] ?? 0,
       tersedia: json['tersedia'] ?? 0,
       kondisi: json['kondisi'] ?? '',
       lokasi: json['lokasi'] ?? '',

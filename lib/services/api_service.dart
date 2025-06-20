@@ -11,6 +11,7 @@ class ApiService {
     token = newToken;
   }
 
+  // ✅ Login API
   Future<Map<String, dynamic>> login(String email, String password) async {
     final url = Uri.parse('$baseUrl/login');
     final response = await http.post(
@@ -22,23 +23,26 @@ class ApiService {
       }),
     );
 
+    print('Login response: ${response.statusCode} - ${response.body}');
+
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final data = json.decode(response.body);
+      final tokenFromResponse = data['data']['token'];
+      updateToken(tokenFromResponse);
+      return data;
     } else {
-      throw Exception('Failed to login: ${response.body}');
+      throw Exception('Login gagal: ${response.body}');
     }
   }
 
+  // ✅ Fetch Data Barang
   Future<List<Barang>> fetchBarang() async {
+    _checkToken();
     final url = Uri.parse('$baseUrl/barang');
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Accept': 'application/json',
-    });
+    final response = await http.get(url, headers: _headers());
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> jsonResponse = json.decode(response.body);
-
       if (jsonResponse['success'] == true) {
         final List<dynamic> barangListJson = jsonResponse['data'];
         return barangListJson.map((json) => Barang.fromJson(json)).toList();
@@ -50,74 +54,70 @@ class ApiService {
     }
   }
 
+  // ✅ Fetch Data Peminjaman
   Future<List<Peminjaman>> fetchPeminjaman() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/peminjaman/mobile-list'),
-        headers: token != null ? {'Authorization': 'Bearer $token'} : {},
-      );
+    _checkToken();
+    final url = Uri.parse('$baseUrl/peminjaman/mobile-list');
+    print('Token: $token');
 
-      print('Response Status Code: ${response.statusCode}');
-      print('Response Body: ${response.body}'); // Cetak respons lengkap
+    final response = await http.get(url, headers: _headers());
+    print('Fetch Peminjaman: ${response.statusCode} - ${response.body}');
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        final List<dynamic> userPeminjaman = data['data']['user'] ?? [];
-        final List<dynamic> lainnyaPeminjaman = data['data']['lainnya'] ?? [];
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = jsonDecode(response.body);
+      final Map<String, dynamic> dataContent = data['data'] ?? {};
 
-        final List<Peminjaman> userPeminjamanList = userPeminjaman.map((json) => Peminjaman.fromJson(json)).toList();
-        final List<Peminjaman> lainnyaPeminjamanList = lainnyaPeminjaman.map((json) => Peminjaman.fromJson(json)).toList();
+      final List<dynamic> userData =
+          dataContent['user'] is List ? dataContent['user'] : [];
+      final List<dynamic> lainnyaData =
+          dataContent['lainnya'] is List ? dataContent['lainnya'] : [];
 
-        return [...userPeminjamanList, ...lainnyaPeminjamanList];
-      } else {
-        throw Exception('Failed to fetch peminjaman');
-      }
-    } catch (e) {
-      print('Error fetching peminjaman: $e');
-      throw Exception('Failed to fetch peminjaman');
+      final List<Peminjaman> userList =
+          userData.map((json) => Peminjaman.fromJson(json)).toList();
+      final List<Peminjaman> lainnyaList =
+          lainnyaData.map((json) => Peminjaman.fromJson(json)).toList();
+
+      return [...userList, ...lainnyaList];
+    } else {
+      throw Exception(
+          'Failed to fetch peminjaman, status: ${response.statusCode}');
     }
   }
 
+  // ✅ Fetch Riwayat Peminjaman
   Future<List<Peminjaman>> fetchRiwayatPeminjaman() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/peminjaman/riwayat'),
-      headers: token != null ? {'Authorization': 'Bearer $token'} : {},
-    );
+    _checkToken();
+    final url = Uri.parse('$baseUrl/peminjaman/riwayat');
+    final response = await http.get(url, headers: _headers());
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body)['data'];
       return data.map((json) => Peminjaman.fromJson(json)).toList();
     } else {
-      throw Exception('Failed to fetch riwayat peminjaman');
+      throw Exception(
+          'Failed to fetch riwayat peminjaman, status: ${response.statusCode}');
     }
   }
 
+  // ✅ Custom Post Peminjaman
   Future<bool> postPeminjamanCustom(Map<String, dynamic> body) async {
+    _checkToken();
     final url = Uri.parse('$baseUrl/peminjaman');
-
     final response = await http.post(
       url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
+      headers: _headers(),
       body: jsonEncode(body),
     );
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return true;
-    } else {
-      return false;
-    }
+    print('Post Peminjaman: ${response.statusCode} - ${response.body}');
+    return response.statusCode == 200 || response.statusCode == 201;
   }
 
-  // Ambil barang yang sedang dipinjam user (status dipinjam)
+  // ✅ Fetch Barang Dipinjam
   Future<List<Barang>> fetchBarangDipinjam() async {
+    _checkToken();
     final url = Uri.parse('$baseUrl/barang-dipinjam');
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Accept': 'application/json',
-    });
+    final response = await http.get(url, headers: _headers());
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> jsonResponse = json.decode(response.body);
@@ -125,42 +125,46 @@ class ApiService {
         final List<dynamic> data = jsonResponse['data'];
         return data.map((item) => Barang.fromJson(item)).toList();
       } else {
-        throw Exception('Gagal mengambil data barang yang dipinjam');
+        throw Exception('Gagal ambil barang dipinjam');
       }
     } else {
       throw Exception(
-          'Gagal mengambil data barang yang dipinjam, status: ${response.statusCode}');
+          'Gagal ambil barang dipinjam, status: ${response.statusCode}');
     }
   }
 
-// Kirim data pengembalian manual
-Future<bool> postPengembalianCustom(Map<String, dynamic> body) async {
-  try {
-    final url = Uri.parse('$baseUrl/pengembalian');
-    print('URL: $url'); // Debugging
-    
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: jsonEncode(body),
-    );
+  // ✅ Custom Post Pengembalian
+  Future<bool> postPengembalianCustom(Map<String, dynamic> body) async {
+    _checkToken();
+    try {
+      final url = Uri.parse('$baseUrl/pengembalian');
+      final response = await http.post(
+        url,
+        headers: _headers(),
+        body: jsonEncode(body),
+      );
 
-    print('Status Code: ${response.statusCode}'); // Debugging
-    print('Response Body: ${response.body}'); // Debugging
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return true;
-    } else {
-      throw Exception('Failed with status: ${response.statusCode}');
+      print('Pengembalian: ${response.statusCode} - ${response.body}');
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print('Error pengembalian: $e');
+      return false;
     }
-  } catch (e) {
-    print('Error in postPengembalianCustom: $e'); // Debugging
-    return false;
   }
-}
 
+  // ✅ Utility Headers
+  Map<String, String> _headers() {
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+  }
+
+  // ✅ Utility Token Check
+  void _checkToken() {
+    if (token == null || token!.isEmpty) {
+      throw Exception('Token belum tersedia. Silakan login terlebih dahulu.');
+    }
+  }
 }

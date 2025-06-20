@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/barang.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
@@ -16,54 +18,52 @@ class _FormPeminjamanPageState extends State<FormPeminjamanPage>
   final _formKey = GlobalKey<FormState>();
   List<Barang> barangList = [];
   Barang? selectedBarang;
-  final _jumlahController = TextEditingController();
+  final _stokController = TextEditingController();
   final _keteranganController = TextEditingController();
   DateTime? tanggalPinjam;
 
   late ApiService apiService;
   bool isLoadingBarang = true;
   bool isSubmitting = false;
-
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+
+  // Modern Color Scheme
+  static const primaryGradientStart = Color(0xFF667EEA);
+  static const primaryGradientEnd = Color(0xFF764BA2);
+  static const accentColor = Color(0xFF4FACFE);
+  static const successColor = Color(0xFF00D4AA);
+  static const warningColor = Color(0xFFFFB74D);
+  static const errorColor = Color(0xFFFF5252);
+  static const backgroundColor = Color(0xFFF8FAFF);
+  static const cardColor = Color(0xFFFFFFFF);
+  static const textPrimary = Color(0xFF2D3748);
+  static const textSecondary = Color(0xFF718096);
+  static const borderColor = Color(0xFFE2E8F0);
 
   @override
   void initState() {
     super.initState();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     apiService = authProvider.apiService;
-
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
-
     _fetchBarang();
     tanggalPinjam = DateTime.now();
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
-    _jumlahController.dispose();
+    _stokController.dispose();
     _keteranganController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -75,19 +75,10 @@ class _FormPeminjamanPageState extends State<FormPeminjamanPage>
         barangList = data.where((barang) => barang.tersedia > 0).toList();
         isLoadingBarang = false;
       });
-      _animationController.forward();
     } catch (e) {
       setState(() => isLoadingBarang = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal mengambil data barang: $e'),
-            backgroundColor: Colors.red.shade400,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        _showCustomSnackBar('Gagal mengambil data barang: $e', isError: true);
       }
     }
   }
@@ -96,56 +87,88 @@ class _FormPeminjamanPageState extends State<FormPeminjamanPage>
     if (!_formKey.currentState!.validate()) return;
 
     if (selectedBarang == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Barang harus dipilih'),
-          backgroundColor: Colors.orange.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      _showCustomSnackBar('Barang harus dipilih', isError: true);
       return;
     }
 
     setState(() => isSubmitting = true);
 
-    final body = {
-      'id_barang': selectedBarang!.idBarang,
-      'jumlah': int.parse(_jumlahController.text),
-      'tanggal_pinjam': tanggalPinjam!.toIso8601String().split('T')[0],
-      'keterangan': _keteranganController.text,
-      'status': 'dipinjam',
-      'label_status': 'menunggu'
-    };
+    try {
+      // Format data untuk Laravel backend
+      final Map<String, dynamic> requestData = {
+        'id_barang': selectedBarang!.idBarang.toString(),
+        'stok': _stokController.text,
+        'tanggal_pinjam': tanggalPinjam!.toIso8601String().split('T')[0],
+        'keterangan': _keteranganController.text.isEmpty
+            ? null
+            : _keteranganController.text,
+        'status': 'dipinjam',
+        'label_status': 'menunggu'
+      };
 
-    final success = await apiService.postPeminjamanCustom(body);
-    setState(() => isSubmitting = false);
+      // Kirim request ke Laravel dengan proper headers
+      final response = await http.post(
+        Uri.parse('${apiService.baseUrl}/peminjaman'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ${apiService.token}',
+          // Tambahkan CSRF token jika diperlukan
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: json.encode(requestData),
+      );
 
-    if (success) {
+      setState(() => isSubmitting = false);
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Peminjaman berhasil diajukan! 🎉'),
-          backgroundColor: Colors.green.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      Navigator.pop(context);
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Gagal mengajukan peminjaman'),
-          backgroundColor: Colors.red.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        _showCustomSnackBar(
+          responseData['message'] ?? 'Peminjaman berhasil diajukan! 🎉',
+          isError: false,
+        );
+        Navigator.pop(context, true); // Return true to indicate success
+      } else {
+        final errorData = json.decode(response.body);
+        _showCustomSnackBar(
+          errorData['message'] ?? 'Gagal mengajukan peminjaman',
+          isError: true,
+        );
+      }
+    } catch (e) {
+      setState(() => isSubmitting = false);
+      if (mounted) {
+        _showCustomSnackBar('Error: $e', isError: true);
+      }
     }
+  }
+
+  void _showCustomSnackBar(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: isError ? errorColor : successColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   Future<void> _pickTanggalPinjam() async {
@@ -157,11 +180,11 @@ class _FormPeminjamanPageState extends State<FormPeminjamanPage>
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4facfe),
+            colorScheme: ColorScheme.light(
+              primary: primaryGradientStart,
               onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black87,
+              surface: cardColor,
+              onSurface: textPrimary,
             ),
           ),
           child: child!,
@@ -176,498 +199,493 @@ class _FormPeminjamanPageState extends State<FormPeminjamanPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-              Color(0xFFf093fb),
-              Color(0xFFf5576c),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Custom App Bar
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withOpacity(0.2),
-                      width: 1,
+      backgroundColor: backgroundColor,
+      body: CustomScrollView(
+        slivers: [
+          // Modern App Bar with Gradient
+          SliverAppBar(
+            expandedHeight: 120,
+            floating: false,
+            pinned: true,
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [primaryGradientStart, primaryGradientEnd],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: FlexibleSpaceBar(
+                title: const Text(
+                  'Form Peminjaman',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                centerTitle: true,
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [primaryGradientStart, primaryGradientEnd],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.assignment_add,
+                      size: 60,
+                      color: Colors.white24,
                     ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new,
-                            color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Text(
-                        'Form Peminjaman',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
               ),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
 
-              // Content
-              Expanded(
-                child: isLoadingBarang
-                    ? Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                              SizedBox(height: 16),
-                              Text(
-                                'Memuat data barang...',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
+          // Content
+          SliverToBoxAdapter(
+            child: isLoadingBarang
+                ? Container(
+                    height: MediaQuery.of(context).size.height * 0.6,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Header Card
-                                FadeTransition(
-                                  opacity: _fadeAnimation,
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.2),
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 5),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            gradient: const LinearGradient(
-                                              colors: [
-                                                Color(0xFF4facfe),
-                                                Color(0xFF00f2fe)
-                                              ],
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                          ),
-                                          child: const Icon(
-                                            Icons.add_circle_outline,
-                                            color: Colors.white,
-                                            size: 32,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        const Text(
-                                          'Ajukan Peminjaman',
-                                          style: TextStyle(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Lengkapi form di bawah untuk mengajukan peminjaman barang',
-                                          style: TextStyle(
-                                            color:
-                                                Colors.white.withOpacity(0.8),
-                                            fontSize: 14,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 24),
-
-                                // Form Fields
-                                SlideTransition(
-                                  position: _slideAnimation,
-                                  child: FadeTransition(
-                                    opacity: _fadeAnimation,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(24),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: Colors.white.withOpacity(0.2),
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.1),
-                                            blurRadius: 10,
-                                            offset: const Offset(0, 5),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          // Dropdown Barang
-                                          _buildDropdownField(),
-
-                                          const SizedBox(height: 20),
-
-                                          // Input Jumlah
-                                          _buildTextField(
-                                            controller: _jumlahController,
-                                            label: 'Jumlah',
-                                            icon: Icons.numbers,
-                                            keyboardType: TextInputType.number,
-                                            validator: (value) {
-                                              if (value?.isEmpty ?? true)
-                                                return 'Jumlah harus diisi';
-                                              final num = int.tryParse(value!);
-                                              if (num == null || num <= 0)
-                                                return 'Jumlah tidak valid';
-                                              if (selectedBarang != null &&
-                                                  num >
-                                                      selectedBarang!
-                                                          .tersedia) {
-                                                return 'Melebihi stok tersedia (${selectedBarang!.tersedia})';
-                                              }
-                                              return null;
-                                            },
-                                          ),
-
-                                          const SizedBox(height: 20),
-
-                                          // Tanggal Pinjam
-                                          _buildDateField(),
-
-                                          const SizedBox(height: 20),
-
-                                          // Keterangan
-                                          _buildTextField(
-                                            controller: _keteranganController,
-                                            label: 'Keterangan (Opsional)',
-                                            icon: Icons.notes,
-                                            maxLines: 3,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 32),
-
-                                // Submit Button
-                                SlideTransition(
-                                  position: _slideAnimation,
-                                  child: FadeTransition(
-                                    opacity: _fadeAnimation,
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      height: 56,
-                                      child: isSubmitting
-                                          ? Container(
-                                              decoration: BoxDecoration(
-                                                color: Colors.white
-                                                    .withOpacity(0.3),
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                              ),
-                                              child: const Center(
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                  strokeWidth: 2,
-                                                ),
-                                              ),
-                                            )
-                                          : Container(
-                                              decoration: BoxDecoration(
-                                                gradient: const LinearGradient(
-                                                  colors: [
-                                                    Color(0xFF43e97b),
-                                                    Color(0xFF38f9d7)
-                                                  ],
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color:
-                                                        const Color(0xFF43e97b)
-                                                            .withOpacity(0.3),
-                                                    blurRadius: 8,
-                                                    offset: const Offset(0, 4),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: ElevatedButton(
-                                                onPressed: _submit,
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.transparent,
-                                                  shadowColor:
-                                                      Colors.transparent,
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            16),
-                                                  ),
-                                                ),
-                                                child: const Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(Icons.send,
-                                                        color: Colors.white),
-                                                    SizedBox(width: 12),
-                                                    Text(
-                                                      'Ajukan Peminjaman',
-                                                      style: TextStyle(
-                                                        fontSize: 18,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 20),
                               ],
                             ),
+                            child: const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  primaryGradientStart),
+                            ),
                           ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Memuat data barang...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            // Header Card
+                            _buildHeaderCard(),
+                            const SizedBox(height: 24),
+
+                            // Form Card
+                            _buildFormCard(),
+                            const SizedBox(height: 24),
+
+                            // Submit Button
+                            _buildSubmitButton(),
+                            const SizedBox(height: 20),
+                          ],
                         ),
                       ),
-              ),
-            ],
+                    ),
+                  ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboardType,
-    int maxLines = 1,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      validator: validator,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 16,
+  Widget _buildHeaderCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: primaryGradientStart.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: Colors.white.withOpacity(0.8),
-          fontSize: 16,
-        ),
-        prefixIcon: Icon(
-          icon,
-          color: Colors.white.withOpacity(0.7),
-        ),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.1),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: Colors.white.withOpacity(0.3),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [primaryGradientStart, primaryGradientEnd],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              Icons.add_task_rounded,
+              color: Colors.white,
+              size: 40,
+            ),
           ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: Colors.white.withOpacity(0.3),
+          const SizedBox(height: 20),
+          const Text(
+            'Ajukan Peminjaman Barang',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: textPrimary,
+            ),
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Color(0xFF4facfe),
-            width: 2,
+          const SizedBox(height: 8),
+          const Text(
+            'Lengkapi formulir di bawah ini untuk mengajukan peminjaman barang inventaris',
+            style: TextStyle(
+              color: textSecondary,
+              fontSize: 15,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
           ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Colors.red,
-            width: 1,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard() {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(
-            color: Colors.red,
-            width: 2,
-          ),
-        ),
-        errorStyle: const TextStyle(
-          color: Colors.red,
-          fontSize: 12,
-        ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDropdownField(),
+          const SizedBox(height: 24),
+          _buildStokField(),
+          const SizedBox(height: 24),
+          _buildDateField(),
+          const SizedBox(height: 24),
+          _buildKeteranganField(),
+        ],
       ),
     );
   }
 
   Widget _buildDropdownField() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-        ),
-      ),
-      child: DropdownButtonFormField<Barang>(
-        decoration: InputDecoration(
-          labelText: 'Pilih Barang',
-          labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Pilih Barang',
+          style: TextStyle(
             fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
-          prefixIcon: Icon(
-            Icons.inventory,
-            color: Colors.white.withOpacity(0.7),
-          ),
-          border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
-        dropdownColor: const Color(0xFF667eea),
-        style: const TextStyle(color: Colors.white),
-        items: barangList
-            .map((b) => DropdownMenuItem(
-                  value: b,
-                  child: Text(
-                    '${b.namaBarang} (${b.tersedia} tersedia)',
-                    style: const TextStyle(color: Colors.white),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            color: backgroundColor,
+          ),
+          child: DropdownButtonFormField<Barang>(
+            decoration: InputDecoration(
+              prefixIcon: Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [primaryGradientStart, primaryGradientEnd],
                   ),
-                ))
-            .toList(),
-        onChanged: (b) => setState(() => selectedBarang = b),
-        validator: (value) =>
-            value == null ? 'Pilih barang terlebih dahulu' : null,
-      ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.inventory_2_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              hintText: 'Pilih barang yang akan dipinjam',
+              hintStyle: const TextStyle(color: textSecondary),
+            ),
+            items: barangList
+                .map((b) => DropdownMenuItem(
+                      value: b,
+                      child: Text(
+                        '${b.namaBarang} (${b.tersedia} tersedia)',
+                        style: const TextStyle(color: textPrimary),
+                      ),
+                    ))
+                .toList(),
+            onChanged: (b) => setState(() => selectedBarang = b),
+            validator: (value) =>
+                value == null ? 'Pilih barang terlebih dahulu' : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStokField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Jumlah Barang',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            color: backgroundColor,
+          ),
+          child: TextFormField(
+            controller: _stokController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              prefixIcon: Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [accentColor, primaryGradientStart],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.numbers_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              hintText: 'Masukkan jumlah barang',
+              hintStyle: const TextStyle(color: textSecondary),
+            ),
+            validator: (value) {
+              if (value?.isEmpty ?? true) return 'Jumlah harus diisi';
+              final num = int.tryParse(value!);
+              if (num == null || num <= 0) return 'Jumlah tidak valid';
+              if (selectedBarang != null && num > selectedBarang!.tersedia) {
+                return 'Melebihi stok tersedia (${selectedBarang!.tersedia})';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildDateField() {
-    return GestureDetector(
-      onTap: _pickTanggalPinjam,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.3),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tanggal Peminjaman',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
           ),
         ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.calendar_today,
-              color: Colors.white.withOpacity(0.7),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: _pickTanggalPinjam,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+              color: backgroundColor,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [warningColor, Color(0xFFFF9800)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.calendar_today_rounded,
+                      color: Colors.white, size: 20),
+                ),
+                Text(
+                  tanggalPinjam != null
+                      ? tanggalPinjam!.toLocal().toString().split(' ')[0]
+                      : 'Pilih tanggal peminjaman',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: tanggalPinjam != null ? textPrimary : textSecondary,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.arrow_drop_down_rounded, color: textSecondary),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKeteranganField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Keterangan (Opsional)',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            color: backgroundColor,
+          ),
+          child: TextFormField(
+            controller: _keteranganController,
+            maxLines: 4,
+            decoration: InputDecoration(
+              prefixIcon: Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [textSecondary, Color(0xFF4A5568)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.notes_rounded,
+                    color: Colors.white, size: 20),
+              ),
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              hintText: 'Tambahkan keterangan jika diperlukan...',
+              hintStyle: const TextStyle(color: textSecondary),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [primaryGradientStart, primaryGradientEnd],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: primaryGradientStart.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: isSubmitting ? null : _submit,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        child: isSubmitting
+            ? const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'Tanggal Pinjam',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withOpacity(0.8),
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(width: 16),
                   Text(
-                    tanggalPinjam != null
-                        ? tanggalPinjam!.toLocal().toString().split(' ')[0]
-                        : 'Pilih tanggal',
-                    style: const TextStyle(
+                    'Mengirim Peminjaman...',
+                    style: TextStyle(
                       fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.send_rounded, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text(
+                    'Ajukan Peminjaman',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
                 ],
               ),
-            ),
-            Icon(
-              Icons.arrow_drop_down,
-              color: Colors.white.withOpacity(0.7),
-            ),
-          ],
-        ),
       ),
     );
   }
