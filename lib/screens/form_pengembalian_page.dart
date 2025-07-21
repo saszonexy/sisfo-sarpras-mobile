@@ -18,7 +18,7 @@ class _FormPengembalianPageState extends State<FormPengembalianPage>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _keteranganController = TextEditingController();
-  final _jumlahController = TextEditingController();
+  final _stokController = TextEditingController();
 
   bool isSubmitting = false;
   DateTime? tanggalKembali;
@@ -47,7 +47,7 @@ class _FormPengembalianPageState extends State<FormPengembalianPage>
     apiService = authProvider.apiService;
 
     // Pre-fill form
-    _jumlahController.text = widget.peminjaman.stok.toString();
+    _stokController.text = widget.peminjaman.stok.toString();
     tanggalKembali = DateTime.now();
 
     _animationController = AnimationController(
@@ -69,7 +69,7 @@ class _FormPengembalianPageState extends State<FormPengembalianPage>
   @override
   void dispose() {
     _keteranganController.dispose();
-    _jumlahController.dispose();
+    _stokController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -501,7 +501,7 @@ class _FormPengembalianPageState extends State<FormPengembalianPage>
               color: backgroundGray,
             ),
             child: TextFormField(
-              controller: _jumlahController,
+              controller: _stokController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 prefixIcon: Container(

@@ -110,13 +110,14 @@ class HomeScreen extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
+                                    const Text(
                                       'Selamat Datang! 👋',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 16,
                                         color: Colors.white70,
                                         fontWeight: FontWeight.w500,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -126,6 +127,8 @@ class HomeScreen extends StatelessWidget {
                                         fontWeight: FontWeight.bold,
                                         color: Colors.white,
                                       ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ],
                                 ),
@@ -147,6 +150,8 @@ class HomeScreen extends StatelessWidget {
                                 color: Colors.white,
                                 fontWeight: FontWeight.w500,
                               ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         ],
@@ -225,7 +230,7 @@ class HomeScreen extends StatelessWidget {
                         _buildModernMenuItem(
                           context,
                           icon: Icons.assignment_rounded,
-                          title: 'Daftar Peminjaman',
+                          title: 'Daftar\nPeminjaman',
                           subtitle: 'Peminjaman aktif',
                           gradient: [successGreen, Color(0xFF059669)],
                           onTap: () => Navigator.push(
@@ -236,7 +241,7 @@ class HomeScreen extends StatelessWidget {
                         _buildModernMenuItem(
                           context,
                           icon: Icons.add_circle_rounded,
-                          title: 'Buat Peminjaman',
+                          title: 'Buat\nPeminjaman',
                           subtitle: 'Tambah baru',
                           gradient: [warningOrange, Color(0xFFD97706)],
                           onTap: () => Navigator.push(
@@ -298,6 +303,7 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(16),
@@ -314,21 +320,24 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               value,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: textDark,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
             Text(
               title,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 color: textLight,
                 fontWeight: FontWeight.w500,
               ),
               textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
             ),
           ],
         ),
@@ -365,6 +374,7 @@ class HomeScreen extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -379,21 +389,29 @@ class HomeScreen extends StatelessWidget {
                   child: Icon(icon, color: Colors.white, size: 28),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: textDark,
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: textDark,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: textLight,
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: textLight,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                 ),
               ],
@@ -450,6 +468,7 @@ class HomeScreen extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         title,
@@ -458,15 +477,19 @@ class HomeScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                           color: textDark,
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           color: textLight,
                           fontWeight: FontWeight.w500,
                         ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
                     ],
                   ),
@@ -477,7 +500,7 @@ class HomeScreen extends StatelessWidget {
                     color: backgroundGray,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.arrow_forward_ios_rounded,
                     size: 16,
                     color: textLight,
@@ -508,11 +531,14 @@ class HomeScreen extends StatelessWidget {
               child: Icon(Icons.logout_rounded, color: errorRed, size: 24),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Konfirmasi Logout',
-              style: TextStyle(
-                color: textDark,
-                fontWeight: FontWeight.bold,
+            const Expanded(
+              child: Text(
+                'Konfirmasi Logout',
+                style: TextStyle(
+                  color: textDark,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
